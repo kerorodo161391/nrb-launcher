@@ -63,7 +63,7 @@ jobs:
           releaseDraft: false
           prerelease: true
           includeUpdaterJson: true
-          updaterJsonKeepDays: 90
+
           args: --target x86_64-pc-windows-msvc
 
       # Pull the just-generated latest*.json from the new semver release and

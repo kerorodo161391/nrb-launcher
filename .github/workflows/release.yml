@@ -67,7 +67,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          updaterJsonKeepDays: 90
+
           args: ${{ matrix.args }}
 
       - name: Capture diagnostic on failure
