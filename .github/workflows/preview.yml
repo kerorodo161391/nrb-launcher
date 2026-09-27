@@ -6,6 +6,9 @@ on:
     paths-ignore:
       - "*.md"
       - ".gitignore"
+  # Allow manual triggering so the in-app updater can be re-published
+  # without needing a code change (e.g. after rotating signing keys).
+  workflow_dispatch:
 
 permissions:
   contents: write
