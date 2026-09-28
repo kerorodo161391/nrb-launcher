@@ -12,9 +12,17 @@ permissions:
   contents: write
 
 jobs:
-  preview:
+  # Job 1: Build the Windows installers and publish them to the
+  # preview-<semver-tag> release. We disable includeUpdaterJson here
+  # because the signing step on a Windows runner is unreliable; the
+  # next job handles the manifest instead.
+  build:
     runs-on: windows-latest
     timeout-minutes: 25
+    outputs:
+      semver_tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      short_sha: ${{ steps.tag.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +46,6 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
-      # Compute a semver tag for this preview.
       - name: Compute preview tag
         id: tag
         shell: bash
@@ -49,21 +56,15 @@ jobs:
           NEW_PATCH=$((PATCH + 1))
           NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           SEMVER_TAG="v${NEW_VERSION}-preview.${SHORT_SHA:0:7}"
-          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=${SEMVER_TAG}" >> $GITHUB_OUTPUT
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${SEMVER_TAG}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Computed tag: ${SEMVER_TAG}"
 
-      # Build Tauri installers and publish the pre-release.
-      # includeUpdaterJson is disabled here so tauri-action does not try
-      # to emit latest.json (which requires .sig files from signing that we
-      # cannot guarantee from env vars alone). We handle the manifest
-      # manually in the next step instead.
       - name: Build Tauri installer (preview pre-release)
         uses: tauri-apps/tauri-action@v0.5.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ steps.tag.outputs.tag }}
           releaseName: "Preview ${{ steps.tag.outputs.version }}"
@@ -73,61 +74,72 @@ jobs:
           includeUpdaterJson: false
           args: --target x86_64-pc-windows-msvc
 
-      # Build the updater manifest manually.
-      # tauri-action uploaded the installers; now we create latest.json
-      # with a proper signature from the signing key so the in-app
-      # updater has a valid manifest to read.
-      - name: Generate and upload latest.json manifest
-        id: manifest
-        shell: bash
+  # Job 2: Sign the installer and emit latest.json on Linux. Linux is
+  # reliable for the Tauri signer (no Windows-only crypto deps).
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install tauri-cli (for signer)
+        run: cargo install tauri-cli --version "^2.0" --locked --quiet
+
+      - name: Download NSIS installer from preview release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SEMVER_TAG: ${{ steps.tag.outputs.tag }}
-          VERSION: ${{ steps.tag.outputs.version }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SEMVER_TAG: ${{ needs.build.outputs.semver_tag }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -e
-          GH_REPO="${{ github.repository }}"
           EXE_NAME="NRB.Launcher_${VERSION}_x64-setup.exe"
-          MSI_NAME="NRB.Launcher_${VERSION}_x64_en-US.msi"
-          EXE_URL="https://github.com/${GH_REPO}/releases/download/${SEMVER_TAG}/${EXE_NAME}"
-          MSI_URL="https://github.com/${GH_REPO}/releases/download/${SEMVER_TAG}/${MSI_NAME}"
-          echo "Semver tag: ${SEMVER_TAG}"
-          echo "Exe URL: ${EXE_URL}"
+          gh release download "${SEMVER_TAG}" \
+            --repo "${{ github.repository }}" \
+            --pattern "${EXE_NAME}" \
+            --dir . \
+            --clobber
+          ls -lh "${EXE_NAME}"
+          echo "EXE_NAME=${EXE_NAME}" >> "$GITHUB_ENV"
 
-          # Confirm published assets exist.
-          echo "Published assets:"
-          gh release view "$SEMVER_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name'
-
-          # Download the NSIS installer for signing.
-          TMP=$(mktemp -d)
-          echo "Downloading ${EXE_NAME}..."
-          gh release download "$SEMVER_TAG" --repo "$GH_REPO" --pattern "$EXE_NAME" --dir "$TMP" --force
-          EXE_PATH="${TMP}/${EXE_NAME}"
-          echo "Downloaded: $(ls -lh "$EXE_PATH")"
-
-          # Sign installer with the Tauri CLI (already installed via pnpm).
-          # pnpm tauri resolves to .bin from node_modules/@tauri-apps/cli.
-          echo "Signing installer with Tauri key..."
-          pnpm tauri signer sign --ci "$EXE_PATH"
-
+      - name: Sign installer and emit latest.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SEMVER_TAG: ${{ needs.build.outputs.semver_tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -e
+          EXE_PATH="${EXE_NAME}"
+          echo "Signing ${EXE_PATH}..."
+          cargo tauri signer sign --ci "${EXE_PATH}"
           SIG_PATH="${EXE_PATH}.sig"
-          if [ ! -f "$SIG_PATH" ]; then
-            echo "::error::Signature file was not created at ${SIG_PATH}"
-            ls -la "$TMP"
+          if [ ! -f "${SIG_PATH}" ]; then
+            echo "::error::Signature file not produced"
+            ls -la
             exit 1
           fi
-          SIGNATURE=$(cat "$SIG_PATH")
+          SIGNATURE=$(cat "${SIG_PATH}")
           echo "Signature acquired (${#SIGNATURE} chars)"
 
-          # Build the latest.json manifest (Tauri v2 format).
-          # windows-x86_64 is the standard triple for NSIS on 64-bit Windows.
-          cat > "${TMP}/latest.json" << MANIFEST
+          GH_REPO="${{ github.repository }}"
+          EXE_URL="https://github.com/${GH_REPO}/releases/download/${SEMVER_TAG}/${EXE_PATH}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          cat > latest.json <<JSON
           {
             "version": "${VERSION}",
-            "notes": "Auto-generated preview build.\n\nCommit: ${{ github.sha }}",
-            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "notes": "Auto-generated preview build.\\n\\nCommit: ${{ github.sha }}",
+            "pub_date": "${PUB_DATE}",
             "platforms": {
               "windows-x86_64": {
                 "signature": "${SIGNATURE}",
@@ -135,64 +147,67 @@ jobs:
               }
             }
           }
-          MANIFEST
+          JSON
+          echo "=== latest.json ==="
+          cat latest.json
 
-          echo "=== latest.json content ==="
-          cat "${TMP}/latest.json"
-          echo ""
-
-          # Upload latest.json to the semver-tagged release.
-          echo "Uploading latest.json to ${SEMVER_TAG}..."
-          gh release upload "$SEMVER_TAG" "${TMP}/latest.json" \
-            --repo "$GH_REPO" --clobber
-          echo "::notice::latest.json uploaded to ${SEMVER_TAG} successfully"
-
-      # Keep a stable "preview-latest" alias so the in-app updater can
-      # always fetch the most recent preview manifest via a fixed URL.
-      - name: Repoint preview-latest tag
+      - name: Upload latest.json to semver-tagged release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEMVER_TAG: ${{ needs.build.outputs.semver_tag }}
         run: |
           set -e
-          SEMVER_TAG="${{ steps.tag.outputs.tag }}"
+          gh release upload "${SEMVER_TAG}" latest.json \
+            --repo "${{ github.repository }}" \
+            --clobber
+          echo "::notice::latest.json uploaded to ${SEMVER_TAG}"
+
+  # Job 3: Keep a stable "preview-latest" alias release so the in-app
+  # updater has a fixed URL. Run after manifest job.
+  alias:
+    needs: [build, manifest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Repoint preview-latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEMVER_TAG: ${{ needs.build.outputs.semver_tag }}
+        run: |
+          set -e
           if ! gh release view preview-latest >/dev/null 2>&1; then
             gh release create preview-latest \
               --repo "${{ github.repository }}" \
-              --target "$SEMVER_TAG" \
+              --target "${SEMVER_TAG}" \
               --prerelease \
-              --notes "Rolling pointer to the most recent preview build. The in-app updater reads latest.json from this tag."
+              --notes "Rolling pointer to the most recent preview. The in-app updater reads latest.json from this release."
           else
             gh release edit preview-latest \
               --repo "${{ github.repository }}" \
-              --target "$SEMVER_TAG"
+              --target "${SEMVER_TAG}"
           fi
-          echo "preview-latest now points to $SEMVER_TAG"
 
-      # Propagate latest.json from the semver-tagged release to the
-      # rolling preview-latest release so the in-app updater has a
-      # stable URL to read.
       - name: Propagate latest.json to preview-latest release
-        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEMVER_TAG: ${{ needs.build.outputs.semver_tag }}
         run: |
           set -e
-          SEMVER_TAG="${{ steps.tag.outputs.tag }}"
           TMP=$(mktemp -d)
-          echo "Downloading latest.json from ${SEMVER_TAG}..."
-          if ! gh release download "$SEMVER_TAG" \
+          if ! gh release download "${SEMVER_TAG}" \
               --repo "${{ github.repository }}" \
               --pattern "latest.json" \
-              --dir "$TMP"; then
-            echo "::error::latest.json was not found in ${SEMVER_TAG} - manifest step may have failed."
+              --dir "${TMP}"; then
+            echo "::error::latest.json missing on ${SEMVER_TAG} - manifest step failed."
             exit 1
           fi
-          echo "Found:"
-          ls -la "$TMP"
-          for f in "$TMP"/latest*.json; do
-            gh release upload preview-latest "$f" \
+          ls -la "${TMP}"
+          for f in "${TMP}"/latest*.json; do
+            gh release upload preview-latest "${f}" \
               --repo "${{ github.repository }}" \
               --clobber
           done
-          echo "=== preview-latest assets now ==="
-          gh release view preview-latest --repo "${{ github.repository }}" --json assets --jq ".assets[].name"
+          echo "=== preview-latest assets ==="
+          gh release view preview-latest \
+            --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name'
