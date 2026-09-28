@@ -79,13 +79,13 @@ jobs:
       # updater has a valid manifest to read.
       - name: Generate and upload latest.json manifest
         id: manifest
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SEMVER_TAG: ${{ steps.tag.outputs.tag }}
           VERSION: ${{ steps.tag.outputs.version }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        shell: bash
         run: |
           set -e
           GH_REPO="${{ github.repository }}"
@@ -96,7 +96,7 @@ jobs:
           echo "Semver tag: ${SEMVER_TAG}"
           echo "Exe URL: ${EXE_URL}"
 
-          # List published assets to confirm they exist.
+          # Confirm published assets exist.
           echo "Published assets:"
           gh release view "$SEMVER_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name'
 
@@ -107,13 +107,10 @@ jobs:
           EXE_PATH="${TMP}/${EXE_NAME}"
           echo "Downloaded: $(ls -lh "$EXE_PATH")"
 
-          # Sign the installer.  cargo tauri signer sign reads the
-          # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-          # env vars automatically.  If the password is empty the key was
-          # generated with --password "" and this will succeed without
-          # prompting.
+          # Sign installer with the Tauri CLI (already installed via pnpm).
+          # pnpm tauri resolves to .bin from node_modules/@tauri-apps/cli.
           echo "Signing installer with Tauri key..."
-          cargo tauri signer sign --ci "$EXE_PATH"
+          pnpm tauri signer sign --ci "$EXE_PATH"
 
           SIG_PATH="${EXE_PATH}.sig"
           if [ ! -f "$SIG_PATH" ]; then
