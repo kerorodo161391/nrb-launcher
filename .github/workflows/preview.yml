@@ -80,6 +80,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout tauri config (sparse)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            src-tauri/tauri.conf.json
+            package.json
+            src-tauri/Cargo.lock
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -119,8 +127,32 @@ jobs:
         run: |
           set -e
           EXE_PATH="${EXE_NAME}"
+
+          # Fail fast if secrets are unset/empty.
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ] || [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty in repo secrets."
+            echo "::error::Re-save at https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+
+          # Stage private key to a temp file (signer reads file path reliably).
+          KEY_FILE=$(mktemp)
+          printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" > "${KEY_FILE}"
+          chmod 600 "${KEY_FILE}"
+
+          # Print committed pubkey so log shows which key is expected.
+          if [ -f "src-tauri/tauri.conf.json" ]; then
+            COMMITTED=$(grep -m1 '\"pubkey\"' src-tauri/tauri.conf.json | sed -E 's/.*\"pubkey\":[[:space:]]*\"([^\"]+)\".*/\1/' || true)
+            echo "Committed pubkey (b64, first 24 chars): ${COMMITTED:0:24}..."
+          else
+            echo "::warning::src-tauri/tauri.conf.json not in workspace - cannot pre-verify pubkey match"
+          fi
+
           echo "Signing ${EXE_PATH}..."
-          cargo tauri signer sign --ci "${EXE_PATH}"
+          # tauri-cli v2 signer sign does NOT accept --ci. Use -k key-file and -p password.
+          cargo tauri signer sign -k "${KEY_FILE}" -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" "${EXE_PATH}"
+          rm -f "${KEY_FILE}"
+
           SIG_PATH="${EXE_PATH}.sig"
           if [ ! -f "${SIG_PATH}" ]; then
             echo "::error::Signature file not produced"
@@ -137,7 +169,7 @@ jobs:
           cat > latest.json <<JSON
           {
             "version": "${VERSION}",
-            "notes": "Auto-generated preview build.\\n\\nCommit: ${{ github.sha }}",
+            "notes": "Auto-generated preview build.\n\nCommit: ${{ github.sha }}",
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "windows-x86_64": {
