@@ -1,0 +1,60 @@
+name: Generate Tauri Signing Key (one-shot)
+
+# Manual-only workflow: generates a fresh Tauri signer keypair and
+# dumps the contents to the log so an operator can copy them into
+# GitHub Secrets and tauri.conf.json.
+#
+# Usage:
+#   1. Run from Actions tab (workflow_dispatch).
+#   2. Open the finished run, expand "Generate key" step.
+#   3. Copy PRIVATE_KEY_BLOCK (entire armored minisign file) into
+#      repo secret TAURI_SIGNING_PRIVATE_KEY (paste as-is).
+#   4. Copy the single-line pubkey value into
+#      src-tauri/tauri.conf.json -> plugins.updater.pubkey.
+#   5. Re-run preview.yml to produce a signed release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  genkey:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tauri-cli
+        shell: bash
+        run: cargo install tauri-cli --version "^2.0" --locked --quiet
+
+      - name: Generate key
+        shell: bash
+        env:
+          # No password - keeps CI usage simple. Rotate periodically.
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          set -eu
+          OUT="$(pwd)/signer"
+          mkdir -p "${OUT}"
+          cargo tauri signer generate -w "${OUT}/nrb.key"
+          echo "=== KEY FILES (paths) ==="
+          ls -la "${OUT}"
+          echo
+          echo "=== BEGIN-PRIVATE-KEY-BLOCK ==="
+          cat "${OUT}/nrb.key"
+          echo "=== END-PRIVATE-KEY-BLOCK ==="
+          echo
+          echo "=== BEGIN-PUBLIC-KEY-BLOCK ==="
+          cat "${OUT}/nrb.pub"
+          echo "=== END-PUBLIC-KEY-BLOCK ==="
+          echo
+          echo ">>> Upload these blocks to repo secrets and update tauri.conf.json"
+          echo ">>> then re-run the preview workflow."
