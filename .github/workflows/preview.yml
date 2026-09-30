@@ -163,17 +163,16 @@ jobs:
 
           echo "Signing ${EXE_PATH}..."
           # tauri-cli v2 (verified against tag tauri-cli-v2.6.0) exposes:
-          #   cargo tauri signer sign -k <KEY> -p <PASSWORD> <FILE>
-          #   cargo tauri signer sign -f <KEY_FILE> -p <PASSWORD> <FILE>
-          # where `-p` is shorthand for `--password`. Passing flags AFTER the
-          # positional <FILE> causes clap to reject them with:
-          #   "Found argument '--password' which wasn't expected, or is invalid"
-          # Fix: terminate cargo's own option parsing with `--` so EVERY
-          # following token is forwarded verbatim to `cargo-tauri signer sign`,
-          # which keeps clap happy even if cargo itself tries to interpret
-          # `-p`. We also keep `-p` (not `--private-key-password`, which does
-          # not exist) and quote the password defensively.
-          cargo tauri signer sign -- -k "${KEY_FILE}" -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" "${EXE_PATH}"
+          #   cargo tauri signer sign [-k <RAW_KEY> | -f <KEY_FILE>] -p <PASSWORD> <FILE>
+          # Note: `-k` accepts a RAW base64 KEY STRING (env TAURI_PRIVATE_KEY).
+          #       `-f` / `--private-key-path` accepts a PATH to a key FILE
+          #       (env TAURI_PRIVATE_KEY_PATH). Mixing them up makes clap
+          #       reject the next token as an unexpected positional, with:
+          #         error: unexpected argument '/tmp/tmp.Af9CjtSWFQ' found
+          # We pass the key via the file path (-f) since we stage to mktemp.
+          # `-p` is shorthand for `--password`. No `--` terminator is
+          # required (cargo already treats `tauri` as a subcommand).
+          cargo tauri signer sign -f "${KEY_FILE}" -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" "${EXE_PATH}"
           rm -f "${KEY_FILE}"
 
           SIG_PATH="${EXE_PATH}.sig"
