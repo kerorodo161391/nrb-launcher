@@ -1,8 +1,5 @@
 name: Generate Tauri Signing Key (one-shot)
 
-# Manual-only: generates a fresh signer keypair, prints PRIVATE + PUBLIC blocks
-# so an operator can paste them into GitHub Secrets and tauri.conf.json.
-
 on:
   workflow_dispatch:
 
@@ -28,14 +25,13 @@ jobs:
       - name: Generate key
         shell: bash
         env:
-          # No password so CI can sign without env-gated secret.
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # password "nutnrb" used for this signer
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "nutnrb"
         run: |
           set -eu
           OUT="$(pwd)/signer"
           mkdir -p "${OUT}"
           cargo tauri signer generate -w "${OUT}/nrb.key"
-          # Tauri creates TWO files: <name>.key (private) and <name>.key.pub (public)
           ls -la "${OUT}"
           echo
           echo "=== BEGIN-PRIVATE-KEY-BLOCK ==="
@@ -49,4 +45,3 @@ jobs:
           echo "=== END-PUBLIC-KEY-BLOCK ==="
           echo
           echo ">>> Copy the two blocks above and update repo secret + tauri.conf.json"
-          echo ">>> then re-run the preview workflow."
