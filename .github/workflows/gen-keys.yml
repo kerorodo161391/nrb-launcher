@@ -24,14 +24,12 @@ jobs:
 
       - name: Generate key
         shell: bash
-        env:
-          # password "nutnrb" used for this signer
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "nutnrb"
         run: |
           set -eu
           OUT="$(pwd)/signer"
           mkdir -p "${OUT}"
-          cargo tauri signer generate -w "${OUT}/nrb.key"
+          # password "nutnrb" - encrypted at rest
+          cargo tauri signer generate -w "${OUT}/nrb.key" --password "nutnrb"
           ls -la "${OUT}"
           echo
           echo "=== BEGIN-PRIVATE-KEY-BLOCK ==="
