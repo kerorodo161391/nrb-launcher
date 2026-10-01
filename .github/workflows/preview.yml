@@ -172,6 +172,17 @@ jobs:
           # We pass the key via the file path (-f) since we stage to mktemp.
           # `-p` is shorthand for `--password`. No `--` terminator is
           # required (cargo already treats `tauri` as a subcommand).
+          #
+          # CRITICAL: clap also auto-reads `TAURI_PRIVATE_KEY` and
+          # `TAURI_PRIVATE_KEY_PATH` from the environment. A stale repo/org
+          # secret literally named `TAURI_PRIVATE_KEY` (from before the rename
+          # to `TAURI_SIGNING_PRIVATE_KEY`) is exposed to every job on the
+          # runner, and would populate the `private_key` field, tripping the
+          # `conflicts_with("private_key_path")` guard with:
+          #   error: the argument '--private-key-path <...>' cannot be used
+          #          with '--private-key <...>'
+          # Clear both env vars defensively before invoking the signer.
+          unset TAURI_PRIVATE_KEY TAURI_PRIVATE_KEY_PATH
           cargo tauri signer sign -f "${KEY_FILE}" -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" "${EXE_PATH}"
           rm -f "${KEY_FILE}"
 
