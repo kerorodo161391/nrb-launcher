@@ -100,7 +100,17 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Install tauri-cli (for signer)
-        run: cargo install tauri-cli --version "^2.0" --locked --quiet
+        # Pin to 2.6.0 (NOT ^2.0): tauri-cli >=2.7 renames the
+        # `env =` attribute on `--private-key` from `TAURI_PRIVATE_KEY`
+        # to `TAURI_SIGNING_PRIVATE_KEY`, which is exactly the name we use
+        # for the workflow secret. That triggers clap to auto-populate
+        # `--private-key` from the step's own env, which then conflicts
+        # with our `-f` flag (the `conflicts_with("private_key")` guard)
+        # and produces:
+        #   error: the argument '--private-key-path <...>' cannot be used
+        #          with '--private-key <...>'
+        # 2.6.0 reads `TAURI_PRIVATE_KEY` instead, which we never set.
+        run: cargo install tauri-cli --version "=2.6.0" --locked --quiet
 
       - name: Download NSIS installer from preview release
         env:
