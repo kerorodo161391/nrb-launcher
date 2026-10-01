@@ -152,7 +152,7 @@ jobs:
           # the single base64 line.
           KEY_FILE=$(mktemp)
           export KEY_FILE
-          printf '%s' aW1wb3J0IG9zLCBwYXRobGliCnNyYyA9IG9zLmVudmlyb24uZ2V0KCdUQVVSSV9TSUdOSU5HX1BSSVZBVEVfS0VZJywgJycpCmtlZXAgPSBbXQpmb3IgbGluZSBpbiBzcmMuc3BsaXRsaW5lcygpOgogICAgcyA9IGxpbmUuc3RyaXAoKQogICAgaWYgbm90IHM6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3VudHJ1c3RlZCBjb21tZW50Jyk6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3RydXN0ZWQgY29tbWVudCcpOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCc9PT0gQkVHSU4nKTogY29udGludWUKICAgIGlmIHMuc3RhcnRzd2l0aCgnPT09IEVORCcpOiBjb250aW51ZQogICAga2VlcC5hcHBlbmQocykKa2V5X3BhdGggPSBvcy5lbnZpcm9uWydLRVlfRklMRSddCnBhdGhsaWIuUGF0aChrZXlfcGF0aCkud3JpdGVfdGV4dCgnXG4nLmpvaW4oa2VlcCkucmVwbGFjZSgnXHInLCAnJykgKyAnXG4nKQo= | base64 -d | python3 -
+          printf '%s' aW1wb3J0IG9zLCBwYXRobGliCnNyYyA9IG9zLmVudmlyb24uZ2V0KCdUQVVSSV9TSUdOSU5HX1BSSVZBVEVfS0VZJywgJycpCmtlZXAgPSBbXQpmb3IgbGluZSBpbiBzcmMuc3BsaXRsaW5lcygpOgogICAgcyA9IGxpbmUuc3RyaXAoKQogICAgaWYgbm90IHM6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3VudHJ1c3RlZCBjb21tZW50Jyk6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3RydXN0ZWQgY29tbWVudCcpOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCctLS0tLUJFR0lOJyk6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJy0tLS0tRU5EJyk6IGNvbnRpbnVlCiAgICBrZWVwLmFwcGVuZChzKQprZXlfcGF0aCA9IG9zLmVudmlyb25bJ0tFWV9GSUxFJ10KcGF0aGxpYi5QYXRoKGtleV9wYXRoKS53cml0ZV90ZXh0KCcnLmpvaW4oa2VlcCkpCg== | base64 -d | python3 -
           chmod 600 "${KEY_FILE}"
           echo "::notice::key_file_lines=$(wc -l < ${KEY_FILE}) key_file_first8=$(head -c 8 ${KEY_FILE})"
 
