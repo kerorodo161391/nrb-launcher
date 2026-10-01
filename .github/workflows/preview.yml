@@ -152,9 +152,9 @@ jobs:
           # the single base64 line.
           KEY_FILE=$(mktemp)
           export KEY_FILE
-          printf '%s' aW1wb3J0IG9zLCBwYXRobGliCnNyYyA9IG9zLmVudmlyb24uZ2V0KCdUQVVSSV9TSUdOSU5HX1BSSVZBVEVfS0VZJywgJycpCmtlZXAgPSBbXQpmb3IgbGluZSBpbiBzcmMuc3BsaXRsaW5lcygpOgogICAgcyA9IGxpbmUuc3RyaXAoKQogICAgaWYgbm90IHM6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3VudHJ1c3RlZCBjb21tZW50Jyk6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJ3RydXN0ZWQgY29tbWVudCcpOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCctLS0tLUJFR0lOJyk6IGNvbnRpbnVlCiAgICBpZiBzLnN0YXJ0c3dpdGgoJy0tLS0tRU5EJyk6IGNvbnRpbnVlCiAgICBrZWVwLmFwcGVuZChzKQprZXlfcGF0aCA9IG9zLmVudmlyb25bJ0tFWV9GSUxFJ10KcGF0aGxpYi5QYXRoKGtleV9wYXRoKS53cml0ZV90ZXh0KCcnLmpvaW4oa2VlcCkpCg== | base64 -d | python3 -
+          printf '%s' aW1wb3J0IG9zLCBwYXRobGliLCBzeXMKa2V5X3JhdyA9IG9zLmVudmlyb24uZ2V0KCdUQVVSSV9TSUdOSU5HX1BSSVZBVEVfS0VZJykgb3Igb3MuZW52aXJvbi5nZXQoJ1RBVVJJX1BSSVZBVEVfS0VZJywgJycpCmlmIG5vdCBrZXlfcmF3OgogICAgc3lzLmV4aXQoJ0VSUk9SOiBib3RoIFRBVVJJX1NJR05JTkdfUFJJVkFURV9LRVkgYW5kIFRBVVJJX1BSSVZBVEVfS0VZIGFyZSBlbXB0eSBvciB1bnNldCcpCmxpbmVzID0ga2V5X3Jhdy5zcGxpdGxpbmVzKCkKcGFydHMgPSBbXQpmb3IgbGluZSBpbiBsaW5lczoKICAgIHMgPSBsaW5lLnN0cmlwKCkKICAgIGlmIG5vdCBzOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCd1bnRydXN0ZWQgY29tbWVudCcpOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCd0cnVzdGVkIGNvbW1lbnQnKTogY29udGludWUKICAgIGlmIHMuc3RhcnRzd2l0aCgnLS0tLS1CRUdJTicpOiBjb250aW51ZQogICAgaWYgcy5zdGFydHN3aXRoKCctLS0tLUVORCcpOiBjb250aW51ZQogICAgcGFydHMuYXBwZW5kKHMpCmtleV9kYXRhID0gJycuam9pbihwYXJ0cykKaWYgbm90IGtleV9kYXRhOgogICAgc3lzLmV4aXQoJ0VSUk9SOiBrZXkgZGF0YSBlbXB0eSBhZnRlciBzdHJpcHBpbmcgbWFya2VycyAtIGNoZWNrIHNlY3JldCBmb3JtYXQnKQprZXlfcGF0aCA9IG9zLmVudmlyb25bJ0tFWV9GSUxFJ10KcGF0aGxpYi5QYXRoKGtleV9wYXRoKS53cml0ZV90ZXh0KGtleV9kYXRhKQo= | base64 -d | python3 -
           chmod 600 "${KEY_FILE}"
-          echo "::notice::key_file_lines=$(wc -l < ${KEY_FILE}) key_file_first8=$(head -c 8 ${KEY_FILE})"
+          echo "::notice::key_file_size=$(wc -c < ${KEY_FILE}) key_file_lines=$(wc -l < ${KEY_FILE}) key_file_first8=$(head -c 8 ${KEY_FILE})"
 
           # Print committed pubkey so log shows which key is expected.
           if [ -f "src-tauri/tauri.conf.json" ]; then
